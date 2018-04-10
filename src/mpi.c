@@ -6,12 +6,24 @@
 #define set_bit(arr, i) (arr[i / 32] |= (1 << (i % 32)))
 #define unset_bit(arr, i) (arr[i / 32] &= ~(1 << (i % 32)))
 
+// Generate roughly 50/50 distribution of enabled and disabled gene-bits.
 void gen_population_nums(uint32_t *pop, uint32_t len, uint32_t genes, int seed_adjust)
 {
   srand(100 + seed_adjust);
   for (uint32_t i = 0; i < len; i++) {
     for (uint32_t j = 0; j < genes; j++) {
       pop[i * genes + j] = rand() % 2;
+    }
+  }
+}
+
+// Generate genes with a specified number of bits enabled.
+void gen_population_bits(uint32_t *pop, uint32_t len, uint32_t genes, uint32_t bits, int seed_adjust)
+{
+  srand(100 + seed_adjust);
+  for (uint32_t i = 0; i < len; i++) {
+    for (uint32_t j = 0; j < bits; j++) {
+      pop[i * genes + (rand() % genes)] = 1;
     }
   }
 }
@@ -137,7 +149,8 @@ void cycle(int id, int tasklen, knapsack_node_t *knapsack, uint32_t pop_size,
   uint32_t* pop = pop0;
   uint32_t* new_pop = pop1;
   uint8_t cycle_type = 0, cycle = 0;
-  gen_population_nums(pop, pop_size, item_count, id);
+  //gen_population_nums(pop, pop_size, item_count, id);
+  gen_population_bits(pop, pop_size, item_count, max_weight / item_count, id);
   //gen_population_bits(pop, pop_size, item_count, item_count / 4);
   uint32_t *ranking = calloc(pop_size, sizeof(uint32_t));
   uint32_t rank_sum = 0, max = 0, score = 0;
@@ -247,7 +260,7 @@ void cycle(int id, int tasklen, knapsack_node_t *knapsack, uint32_t pop_size,
              0, MPI_COMM_WORLD);
 
   if (id == 0) {
-    for (uint16_t i = 0; i < pop_size; i++) {
+    for (uint16_t i = 0; i < tasklen; i++) {
         uint32_t cell_weight = get_weight(&results[i * item_count], item_count, knapsack);
         if (cell_weight < max_weight) {
             score = get_value(&results[i * item_count], item_count, knapsack);
@@ -285,7 +298,7 @@ int main(int argc, char **argv)
   MPI_Comm_size(MPI_COMM_WORLD, &tasklen);
 
   uint32_t pop_size = 16;
-  uint32_t item_count = 128; // Must be a power of two.
+  uint32_t item_count = 16; // Must be a power of two.
   uint32_t max_value = 100;
   uint32_t max_weight = 100;
   uint32_t cycles = 1000;

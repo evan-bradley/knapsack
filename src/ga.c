@@ -5,11 +5,23 @@
 #define set_bit(arr, i) (arr[i / 32] |= (1 << (i % 32)))
 #define unset_bit(arr, i) (arr[i / 32] &= ~(1 << (i % 32)))
 
+// Generate roughly 50/50 distribution of enabled and disabled gene-bits.
 void gen_population_nums(uint32_t *pop, uint32_t len, uint32_t genes)
 {
   for (uint32_t i = 0; i < len; i++) {
     for (uint32_t j = 0; j < genes; j++) {
       pop[i * genes + j] = rand() % 2;
+    }
+  }
+}
+
+// Generate genes with a specified number of bits enabled.
+void gen_population_bits(uint32_t *pop, uint32_t len, uint32_t genes, uint32_t bits, int seed_adjust)
+{
+  srand(100 + seed_adjust);
+  for (uint32_t i = 0; i < len; i++) {
+    for (uint32_t j = 0; j < bits; j++) {
+      pop[i * genes + (rand() % genes)] = 1;
     }
   }
 }
@@ -226,11 +238,11 @@ void cycle(knapsack_node_t *knapsack, uint32_t pop_size,
 
 int main(int argc, char **argv)
 {
-  uint32_t pop_size = 16;
-  uint32_t item_count = 16; // Must be a power of two.
-  uint32_t max_value = 100;
-  uint32_t max_weight = 100;
-  uint32_t cycles = 1000;
+  uint32_t pop_size = 1024;
+  uint32_t item_count = 128; // Must be a power of two.
+  uint32_t max_value = 1000;
+  uint32_t max_weight = 1000;
+  uint32_t cycles = 10000;
 
   knapsack_node_t *nodes = (knapsack_node_t*) calloc(item_count, sizeof(knapsack_node_t));
   gen_nodes(nodes, item_count, max_value, max_weight);
