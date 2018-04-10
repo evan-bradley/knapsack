@@ -179,7 +179,7 @@ void cycle(knapsack_node_t *knapsack, uint32_t pop_size,
 
       breed(&new_pop[x * item_count], &new_pop[(x + 1) * item_count],
             &pop[parent1_idx * item_count], &pop[parent2_idx * item_count],
-            pop_size); // (2 * 8 * sizeof(uint32_t))
+            pop_size / 2); // (2 * 8 * sizeof(uint32_t))
 
         mutate(&new_pop[x * item_count], item_count);
         mutate(&new_pop[(x + 1) * item_count], item_count);
@@ -230,7 +230,7 @@ int main(int argc, char **argv)
   uint32_t item_count = 16; // Must be a power of two.
   uint32_t max_value = 100;
   uint32_t max_weight = 100;
-  uint32_t cycles = 100;
+  uint32_t cycles = 1000;
 
   knapsack_node_t *nodes = (knapsack_node_t*) calloc(item_count, sizeof(knapsack_node_t));
   gen_nodes(nodes, item_count, max_value, max_weight);
