@@ -1,32 +1,10 @@
-#include <stdio.h>
-#include <malloc.h>
-#include <stdlib.h>
+#include "kp.h"
 #include <time.h>
 
-
 // Keep[N][W]
-int **keep;
+uint32_t **keep;
 // V[n + 1][W + 1]
-int **V;
-
-
-typedef struct knapnode
-{
-    int value;
-    int weight;
-} knapsack_node;
-
-void generate_nodes(int N, int W, knapsack_node *nodes)
-{
-    srand(time(NULL));
-
-    for (int i = 0; i < N; i++)
-    {
-        nodes[i].value = (rand() % (N - 1)) + 1;
-        nodes[i].weight = rand() % W;
-        printf("Node: v:%d, w:%d\n", nodes[i].value, nodes[i].weight);
-    }
-}
+uint32_t **V;
 
 /**
  *
@@ -35,18 +13,18 @@ void generate_nodes(int N, int W, knapsack_node *nodes)
  * @param W The total size possible
  * @return The optimal solution
  */
-int Knapsack(knapsack_node *nodes, int n, int W)
+int Knapsack(knapsack_node_t *nodes, uint32_t n, uint32_t W)
 {
-    
-    for (int i = 0; i < W; i++)
+
+    for (uint32_t i = 0; i < W; i++)
     {
         V[0][i] = 0;
     }
-    
-    for (int i = 1; i < n; i++)
+
+    for (uint32_t i = 1; i <= n; i++)
     {
-        knapsack_node node = nodes[i];
-        for (int j = 0; j < W; j++)
+        knapsack_node_t node = nodes[i];
+        for (uint32_t j = 0; j <= W; j++)
         {
             if ((node.weight <= j) && (node.value + V[i - 1][j - node.weight] > V[i - 1][j]))
             {
@@ -60,49 +38,51 @@ int Knapsack(knapsack_node *nodes, int n, int W)
             }
         }
     }
-    int K = W;
+    uint32_t K = W;
     for (int i = n; i > 0; i--)
     {
-        knapsack_node node = nodes[i];
+        knapsack_node_t node = nodes[i];
         if (keep[i][K] == 1)
         {
             // output i
-            printf("Good i: %d\n", i);
+          printf("Good i: %d; %u, %u\n", i, nodes[i].value, nodes[i].weight);
             K = K - node.weight;
         }
     }
     return V[n][W];
 }
 
-int* allocate_mem(int*** arr, int n, int m)
+uint32_t* allocate_mem(uint32_t*** arr, uint32_t n, uint32_t m)
 {
-    *arr = (int**)malloc(n * sizeof(int*));
-    int *arr_data = malloc( n * m * sizeof(int));
-    for(int i=0; i<n; i++)
+    *arr = (uint32_t**)malloc(n * sizeof(uint32_t*));
+    uint32_t *arr_data = malloc( n * m * sizeof(uint32_t));
+    for(uint32_t i=0; i<n; i++)
         (*arr)[i] = arr_data + i * m ;
-    return arr_data; //free point
+    return arr_data; //free pouint32_t
 }
 
-void deallocate_mem(int*** arr, int* arr_data){
+void deallocate_mem(uint32_t*** arr, uint32_t* arr_data){
     free(arr_data);
     free(*arr);
 }
 
 int main()
 {
-    int N = 100; // The number of things
-    int W = 200; // The total possible weight
+    uint32_t node_count = 16;
+    uint32_t max_value = 100;
+    uint32_t max_weight = 100;
 
     // Generate keep and V
-    int *keep_point = allocate_mem(&keep, N + 1, W + 1);
-    int *V_point = allocate_mem(&V, N + 1, W + 1);
+    uint32_t *keep_point = allocate_mem(&keep, node_count + 1, max_weight + 1);
+    uint32_t *V_point = allocate_mem(&V, node_count + 1, max_weight + 1);
 
     // Generate the nodes
-    knapsack_node *nodes = (knapsack_node*) calloc(N, sizeof(knapsack_node));
-    generate_nodes(N, W, nodes);
+    knapsack_node_t *nodes = (knapsack_node_t*) calloc(node_count, sizeof(knapsack_node_t));
+    gen_nodes(nodes, node_count, max_value, max_weight);
+    print_nodes(nodes, node_count);
 
     // Evaluate
-    int maxVal = Knapsack(nodes, N, W);
+    uint32_t maxVal = Knapsack(nodes, node_count, max_weight);
     printf("Max values: %d\n", maxVal);
 
     free(nodes);

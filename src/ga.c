@@ -1,23 +1,8 @@
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdio.h>
+#include "kp.h"
 
 #define get_bit(arr, i) (arr[i / 32] & (1 << (i % 32)))
 #define set_bit(arr, i) (arr[i / 32] |= (1 << (i % 32)))
 #define unset_bit(arr, i) (arr[i / 32] &= ~(1 << (i % 32)))
-
-typedef struct knapnode {
-  uint32_t value;
-  uint32_t weight;
-} knapsack_node_t;
-
-void gen_nodes(knapsack_node_t *knapsack, uint32_t nodes, uint32_t max_weight)
-{
-  for (uint32_t i = 0; i < nodes; i++) {
-    knapsack[i].value = rand() % (nodes - 1) + 1;
-    knapsack[i].weight = rand() % (max_weight - 1) + 1;
-    }
-}
 
 void gen_population_nums(uint32_t **pop, uint32_t len, uint32_t genes)
 {
@@ -179,14 +164,16 @@ void cycle(knapsack_node_t *knapsack, uint32_t pop_size,
 
 int main(int argc, char **argv)
 {
-  srand(100);
   uint32_t pop_size = 100;
-  uint32_t item_count = 1024; // Must be a power of two.
-  uint32_t max_weight = 10000;
+  uint32_t item_count = 16;
+  //uint32_t item_count = 1024; // Must be a power of two.
+  uint32_t max_value = 100;
+  uint32_t max_weight = 100;
   uint32_t cycles = 100;
 
   knapsack_node_t *nodes = (knapsack_node_t*) calloc(item_count, sizeof(knapsack_node_t));
-  gen_nodes(nodes, item_count, max_weight);
+  gen_nodes(nodes, item_count, max_value, max_weight);
+  print_nodes(nodes, item_count);
 
   cycle(nodes, pop_size, item_count, max_weight, cycles);
 
