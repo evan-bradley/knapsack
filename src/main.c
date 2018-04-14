@@ -1,6 +1,11 @@
 #include "kp.h"
 #include <time.h>
 
+ #define max(a,b) \
+      ({ __typeof__ (a) _a = (a); \
+         __typeof__ (b) _b = (b); \
+        _a > _b ? _a : _b; })
+
 /**
  *
  * @param node The knapsack potential entries
@@ -11,23 +16,28 @@
 knapsack_node_t Knapsack(knapsack_node_t *nodes, uint32_t **V,
                          uint32_t **keep, file_header_t opt)
 {
-
     knapsack_node_t best = {0, 0};
 
-    for (uint32_t i = 0; i < opt.max_weight; i++)
+    for (uint32_t i = 0; i <= opt.item_count; i++)
     {
-        V[0][i] = 0;
-    }
-
-    for (uint32_t i = 1; i <= opt.item_count; i++)
-    {
-        knapsack_node_t node = nodes[i];
+        // NOTE: if i == 0, node is garbage; just set to satisfy the compiler.
+        knapsack_node_t node = i != 0 ? nodes[i - 1] : nodes[i];
         for (uint32_t j = 0; j <= opt.max_weight; j++)
         {
-            if ((node.weight <= j) && (node.value + V[i - 1][j - node.weight] > V[i - 1][j]))
+            if (i == 0 || j == 0)
             {
-                V[i][j] = node.value + V[i - 1][j - node.weight];
-                keep[i][j] = 1;
+              V[i][j] = 0;
+            }
+            else if ((node.weight <= j))
+            {
+                //V[i][j] = max(V[i - 1][j], V[i - 1][j - node.weight] + node.value);
+                //keep[i][j] = 1;
+                if (node.value + V[i - 1][j - node.weight] > V[i - 1][j]) {
+                  V[i][j] = V[i - 1][j - node.weight] + node.value;
+                  keep[i][j] = 1;
+                } else {
+                  V[i][j] = V[i - 1][j];
+                }
             }
             else
             {
@@ -39,10 +49,10 @@ knapsack_node_t Knapsack(knapsack_node_t *nodes, uint32_t **V,
     uint32_t K = opt.max_weight;
     for (int i = opt.item_count; i > 0; i--)
     {
-        knapsack_node_t node = nodes[i];
+        knapsack_node_t node = nodes[i - 1];
         if (keep[i][K] == 1)
         {
-            best.weight += nodes[i].weight;
+            best.weight += nodes[i - 1].weight;
             K = K - node.weight;
         }
     }
@@ -53,11 +63,11 @@ knapsack_node_t Knapsack(knapsack_node_t *nodes, uint32_t **V,
 
 uint32_t* allocate_mem(uint32_t*** arr, uint32_t n, uint32_t m)
 {
-    *arr = (uint32_t**)malloc(n * sizeof(uint32_t*));
-    uint32_t *arr_data = malloc( n * m * sizeof(uint32_t));
+    *arr = (uint32_t**)calloc(n, sizeof(uint32_t*));
+    uint32_t *arr_data = calloc(n * m, sizeof(uint32_t));
     for(uint32_t i=0; i<n; i++)
         (*arr)[i] = arr_data + i * m ;
-    return arr_data; //free pouint32_t
+    return arr_data; //free point
 }
 
 void deallocate_mem(uint32_t*** arr, uint32_t* arr_data)
@@ -69,9 +79,9 @@ void deallocate_mem(uint32_t*** arr, uint32_t* arr_data)
 int main()
 {
     file_header_t options = {
-      16,  // item_count
+      1024,  // item_count
       100, // max_value
-      100, // max_weight
+      1000, // max_weight
       0, // best_value
       0, // best_weight
     };
@@ -97,8 +107,15 @@ int main()
     options.best_value = maxVal.value;
     options.best_weight = maxVal.weight;
 
-    for (uint32_t i = 0; i < options.item_count; i++) {
-        best[i] = keep[i][options.max_weight];
+    uint32_t K = options.max_weight;
+    for (int i = options.item_count; i > 0; i--)
+    {
+        knapsack_node_t node = nodes[i - 1];
+        best[i - 1] = keep[i][K];
+        if (keep[i][K] == 1)
+        {
+            K = K - node.weight;
+        }
     }
 
     write_data(&options, nodes, best, "test.kp");

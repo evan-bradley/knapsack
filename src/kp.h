@@ -55,13 +55,17 @@ void write_data(file_header_t *header, knapsack_node_t *nodes, uint32_t *best, c
     fclose(data);
 }
 
-void read_data(file_header_t *header, knapsack_node_t *nodes, uint32_t *best, char *filename)
+void read_data(file_header_t *header, knapsack_node_t **nodes, uint32_t **best, char *filename)
 {
     FILE *data = fopen(filename, "rb");
 
     fread(header, sizeof(file_header_t), 1, data);
-    fread(best, sizeof(uint32_t), header->item_count, data);
-    fread(nodes, sizeof(knapsack_node_t), header->item_count, data);
+
+    *best = (uint32_t *) malloc(header->item_count * sizeof(uint32_t));
+    fread(*best, sizeof(uint32_t), header->item_count, data);
+
+    *nodes = (knapsack_node_t *) malloc(header->item_count * sizeof(knapsack_node_t));
+    fread(*nodes, sizeof(knapsack_node_t), header->item_count, data);
 
     fclose(data);
 }

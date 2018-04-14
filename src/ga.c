@@ -65,6 +65,16 @@ uint32_t cell_dist(uint32_t *cell0, uint32_t *cell1, uint32_t genes) {
   return floor(sqrt(sum));
 }
 
+uint32_t cell_diff(uint32_t *cell0, uint32_t *cell1, uint32_t genes) {
+  uint32_t sum = 0;
+
+  for (uint32_t i = 0; i < genes; i++) {
+    sum += abs(cell0[i] - cell1[i]);
+  }
+
+  return sum;
+}
+
 knapsack_node_t test_fitness(uint32_t *cell, uint32_t len,
                              knapsack_node_t *knapsack, uint64_t max_weight)
 {
@@ -143,19 +153,19 @@ void copy_arr(uint32_t **arr0, uint32_t **arr1, uint32_t m, uint32_t n)
     }
 }
 
-void cycle(knapsack_node_t *knapsack, parameters_t settings)
+void cycle(knapsack_node_t *knapsack, parameters_t settings,
+           knapsack_node_t *best, uint32_t *best_cell)
 {
 
   uint32_t genes = settings.item_count;
   uint32_t* pop0 = (uint32_t *) calloc(settings.pop_size * genes, sizeof(uint32_t));
   uint32_t* pop1 = (uint32_t *) calloc(settings.pop_size * genes, sizeof(uint32_t));
-  uint32_t* best_cell = (uint32_t *) calloc(genes, sizeof(uint32_t));
 
   uint32_t* pop = pop0;
   uint32_t* new_pop = pop1;
   uint8_t cycle = 0;
   //gen_population_nums(pop, pop_size, item_count);
-  gen_population_bits(pop, settings.pop_size, settings.item_count, settings.item_count / 2, 0);
+  gen_population_bits(pop, settings.pop_size, settings.item_count, settings.item_count / 128, 0);
   uint32_t *ranking = calloc(settings.pop_size, sizeof(uint32_t));
   uint32_t rank_sum = 0, max = 0;
   knapsack_node_t score = {0, 0};
@@ -173,6 +183,8 @@ void cycle(knapsack_node_t *knapsack, parameters_t settings)
         if (score.weight < settings.max_weight && score.value > max) {
             max = score.value;
             memcpy(best_cell, &pop[i * genes], genes * sizeof(uint32_t));
+            best->value = score.value;
+            best->weight = score.weight;
         }
 
         ranking[i] = score.value;
@@ -244,40 +256,82 @@ void cycle(knapsack_node_t *knapsack, parameters_t settings)
       if (score.weight < settings.max_weight && score.value > max) {
         max = score.value;
         memcpy(best_cell, &pop[i * genes], genes * sizeof(uint32_t));
+        best->value = score.value;
+        best->weight = score.weight;
       }
   }
 
-  if (max == 0) {
+  /*if (max == 0) {
       printf("No solutions found\n");
   } else {
       print_cell_nodes(best_cell, genes, knapsack);
-  }
+  }*/
 
   free(pop0);
   free(pop1);
   free(ranking);
-  free(best_cell);
 }
 
 int main(int argc, char **argv)
 {
   parameters_t settings = {
-    16, // pop_size
-    16, // item_count
+    2048, // pop_size
+    1024, // item_count
     100, // max_value
-    100, // max_weight
-    100, // cycles
+    1000, // max_weight
+    10000, // cycles
     1, // mutation_prob
     0, // migration_size,
     0, // migration_freq,
   };
+  uint32_t genes = settings.item_count;
 
-  knapsack_node_t *nodes = (knapsack_node_t*) calloc(settings.item_count, sizeof(knapsack_node_t));
-  gen_nodes(nodes, settings.item_count, settings.max_value, settings.max_weight);
-  //print_nodes(nodes, settings.item_count);
+  file_header_t header;
+  knapsack_node_t *nodes;
+  uint32_t *best_cell, *best_cell_ga;
+  knapsack_node_t best = {0, 0};
+  uint32_t dist, diff;
 
-  cycle(nodes, settings);
+  if (argc > 2) {
+    if (*argv[1] == 'i') {
+      read_data(&header, &nodes, &best_cell, argv[2]);
+    }
 
+    settings.item_count = header.item_count;
+    settings.max_weight = header.max_weight;
+  } else {
+    nodes = (knapsack_node_t*) calloc(settings.item_count, sizeof(knapsack_node_t));
+    gen_nodes(nodes, settings.item_count, settings.max_value, settings.max_weight);
+  }
+
+  best_cell_ga = (uint32_t *) calloc(genes, sizeof(uint32_t));
+
+  cycle(nodes, settings, &best, best_cell_ga);
+
+  if (argc > 2) {
+    dist = cell_dist(best_cell, best_cell_ga, genes);
+    diff = cell_diff(best_cell, best_cell_ga, genes);
+
+    if (best.value == 0) {
+      printf("No results\n");
+    } else {
+      printf("Percent optimal: %.4f\n", (float) best.value / (float) header.best_value);
+      printf("Distance: %u\n", dist);
+      printf("Difference: %u\n", diff);
+    }
+  } else {
+    if (best.value == 0) {
+      printf("No results\n");
+    } else {
+      printf("Best value: %u\tBest weight: %u\n", best.value, best.weight);
+    }
+  }
+
+  if (argc > 2) {
+    free(best_cell);
+  }
+
+  free(best_cell_ga);
   free(nodes);
   return 0;
 }
