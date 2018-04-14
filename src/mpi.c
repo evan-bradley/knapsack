@@ -56,31 +56,32 @@ void print_population(uint32_t *pop, uint32_t len, uint32_t genes)
   }
 }
 
-uint64_t test_fitness(uint32_t *cell, uint32_t len, knapsack_node_t *knapsack, uint64_t max_weight)
+knapsack_node_t test_fitness(uint32_t *cell, uint32_t len,
+                             knapsack_node_t *knapsack, uint64_t max_weight)
 {
-  uint32_t value_total = 0;
-  uint32_t weight_total = 0;
+  knapsack_node_t score = {0, 0};
 
   for (uint32_t i = 0; i < len; i++) {
     if (cell[i] == 1) {
-      weight_total += knapsack[i].weight;
-      value_total += knapsack[i].value;
+      score.weight += knapsack[i].weight;
+      score.value += knapsack[i].value;
 
       // Note that breaking once we hit the max weight only counts the values up
       // to that point, and so might induce bias.
-      if (weight_total > max_weight) {
-        value_total = value_total / 2;
+      if (score.weight > max_weight) {
+        score.value = score.value / 2;
         break;
       }
     }
   }
 
-  if (weight_total == 0) {
-      return 0;
+  if (score.weight == 0) {
+      return score;
   }
 
   // Prioritize the value, but give a bump for a better value-to-weight ratio.
-  return value_total + (uint64_t) (value_total / weight_total);
+  //return value_total + (uint64_t) (value_total / weight_total);
+  return score;
 }
 
 uint32_t get_weight(uint32_t *cell, uint32_t len, knapsack_node_t *knapsack)
@@ -131,34 +132,36 @@ void copy_arr(uint32_t **arr0, uint32_t **arr1, uint32_t m, uint32_t n)
     }
 }
 
-void cycle(int id, int tasklen, knapsack_node_t *knapsack, uint32_t pop_size,
-           uint32_t item_count, uint32_t max_weight, uint32_t cycles)
+void cycle(int id, int tasklen,
+           knapsack_node_t *knapsack, parameters_t settings)
 {
-  uint32_t swap_size = pop_size / 10;
+  uint32_t swap_size = settings.pop_size / 10;
   uint8_t swap_cycle = 10;
+  uint32_t genes = settings.item_count;
 
-  uint32_t* pop0 = (uint32_t *) calloc(pop_size * item_count, sizeof(uint32_t));
-  uint32_t* pop1 = (uint32_t *) calloc(pop_size * item_count, sizeof(uint32_t));
-  uint32_t* best_cell = (uint32_t *) calloc(item_count, sizeof(uint32_t));
-  uint32_t* send_buf = (uint32_t *) calloc(swap_size * item_count, sizeof(uint32_t));
-  uint32_t* recv_buf = (uint32_t *) calloc(swap_size * item_count, sizeof(uint32_t));
+  uint32_t* pop0 = (uint32_t *) calloc(settings.pop_size * genes, sizeof(uint32_t));
+  uint32_t* pop1 = (uint32_t *) calloc(settings.pop_size * genes, sizeof(uint32_t));
+  uint32_t* best_cell = (uint32_t *) calloc(genes, sizeof(uint32_t));
+  uint32_t* send_buf = (uint32_t *) calloc(swap_size * genes, sizeof(uint32_t));
+  uint32_t* recv_buf = (uint32_t *) calloc(swap_size * genes, sizeof(uint32_t));
   uint32_t* swap_indices = (uint32_t *) calloc(swap_size, sizeof(uint32_t));
-  uint32_t* results = (uint32_t *) calloc(tasklen * item_count, sizeof(uint32_t));
+  uint32_t* results = (uint32_t *) calloc(tasklen * genes, sizeof(uint32_t));
 
   MPI_Request r_send, r_recv;
   uint32_t* pop = pop0;
   uint32_t* new_pop = pop1;
   uint8_t cycle_type = 0, cycle = 0;
-  //gen_population_nums(pop, pop_size, item_count, id);
-  gen_population_bits(pop, pop_size, item_count, max_weight / item_count, id);
-  //gen_population_bits(pop, pop_size, item_count, item_count / 4);
-  uint32_t *ranking = calloc(pop_size, sizeof(uint32_t));
-  uint32_t rank_sum = 0, max = 0, score = 0;
+  //gen_population_nums(pop, pop_size, genes, id);
+  gen_population_bits(pop, settings.pop_size, genes, settings.max_weight / genes, id);
+  //gen_population_bits(pop, pop_size, genes, genes / 4);
+  uint32_t *ranking = calloc(settings.pop_size, sizeof(uint32_t));
+  uint32_t rank_sum = 0, max = 0;
+  knapsack_node_t score = {0, 0};
   uint32_t parent1_score, parent2_score;
   int64_t parent1_idx, parent2_idx;
 
-  for (uint32_t c = 0; c < cycles; c++) {
-    for (uint32_t x = 0; x < pop_size; x +=2) {
+  for (uint32_t c = 0; c < settings.cycles; c++) {
+    for (uint32_t x = 0; x < settings.pop_size; x +=2) {
       // Note: parents are chosen WITH replacement
       parent1_score = 0;
       parent2_score = 0;
@@ -166,11 +169,18 @@ void cycle(int id, int tasklen, knapsack_node_t *knapsack, uint32_t pop_size,
       parent2_idx = -1;
       rank_sum = 0;
 
-      for (uint32_t i = 0; i < pop_size; i++) {
-        score = test_fitness(&pop[i * item_count], item_count, knapsack, max_weight);
+      for (uint32_t i = 0; i < settings.pop_size; i++) {
+        score = test_fitness(&pop[i * genes], genes, knapsack, settings.max_weight);
 
-        ranking[i] = score;
-        rank_sum += score;
+        // Not all generations may be meet the constraints or have the highest
+        // value, so store the best-scoring cell seen so far.
+        if (score.weight < settings.max_weight && score.value > max) {
+            max = score.value;
+            memcpy(best_cell, &pop[i * genes], genes * sizeof(uint32_t));
+        }
+
+        ranking[i] = score.value;
+        rank_sum += score.value;
       }
 
       if (rank_sum == 0) {
@@ -185,7 +195,7 @@ void cycle(int id, int tasklen, knapsack_node_t *knapsack, uint32_t pop_size,
       }
       rank_sum = 0;
 
-      for (int64_t i = 0; i < pop_size; i++) {
+      for (int64_t i = 0; i < settings.pop_size; i++) {
         rank_sum += ranking[i];
         if (parent1_score < rank_sum && parent1_idx == -1) {
           parent1_idx = i;
@@ -200,48 +210,37 @@ void cycle(int id, int tasklen, knapsack_node_t *knapsack, uint32_t pop_size,
         }
       }
 
-      breed(&new_pop[x * item_count], &new_pop[(x + 1) * item_count],
-            &pop[parent1_idx * item_count], &pop[parent2_idx * item_count],
-            pop_size / 2); // (2 * 8 * sizeof(uint32_t))
+      breed(&new_pop[x * genes], &new_pop[(x + 1) * genes],
+            &pop[parent1_idx * genes], &pop[parent2_idx * genes],
+            genes / 2); // (2 * 8 * sizeof(uint32_t))
 
-        mutate(&new_pop[x * item_count], item_count);
-        mutate(&new_pop[(x + 1) * item_count], item_count);
-
-    }
-
-    // The population will not necessarily converge to the optimal solution,
-    // so record the best seen cell out of all previously seen cells at each
-    // generation.
-    for (uint16_t i = 0; i < pop_size; i++) {
-        uint32_t cell_weight = get_weight(&new_pop[i * item_count], item_count, knapsack);
-        if (cell_weight < max_weight) {
-            score = get_value(&new_pop[i * item_count], item_count, knapsack);
-
-            if (score > max) {
-                max = score;
-                memcpy(best_cell, &new_pop[i * item_count], item_count * sizeof(uint32_t));
-            }
+        if (rand() % settings.mutation_prob == 0) {
+          mutate(&new_pop[x * genes], genes);
         }
+
+        if (rand() % settings.mutation_prob == 0) {
+          mutate(&new_pop[(x + 1) * genes], genes);
+        }
+
     }
 
     // NOTE: There can be duplicate indicies here.
     for (uint32_t i = 0; i < swap_size; i++) {
-      swap_indices[i] = rand() % pop_size;
-      memcpy(&send_buf[i], &new_pop[i * item_count], item_count * sizeof(uint32_t));
+      swap_indices[i] = rand() % settings.pop_size;
+      memcpy(&send_buf[i], &new_pop[i * genes + swap_indices[i]], genes * sizeof(uint32_t));
     }
 
     if (cycle % swap_cycle == 0) {
-      MPI_Isend(send_buf, swap_size * item_count, MPI_UNSIGNED,
+      MPI_Isend(send_buf, swap_size * genes, MPI_UNSIGNED,
                 (id + 1) % tasklen, 0, MPI_COMM_WORLD, &r_send);
-      MPI_Irecv(recv_buf, swap_size * item_count, MPI_UNSIGNED,
+      MPI_Irecv(recv_buf, swap_size * genes, MPI_UNSIGNED,
                 (id - 1) % tasklen, 0, MPI_COMM_WORLD, &r_recv);
     }
     MPI_Wait(&r_send, MPI_STATUS_IGNORE);
     MPI_Wait(&r_recv, MPI_STATUS_IGNORE);
 
     for (uint32_t i = 0; i < swap_size; i++) {
-      swap_indices[i] = rand() % pop_size;
-      memcpy(&new_pop[i * item_count], &recv_buf[i], item_count * sizeof(uint32_t));
+      memcpy(&new_pop[i * genes + swap_indices[i]], &recv_buf[i], genes * sizeof(uint32_t));
     }
 
     if (cycle_type == 0) {
@@ -255,27 +254,33 @@ void cycle(int id, int tasklen, knapsack_node_t *knapsack, uint32_t pop_size,
     }
   }
 
-  MPI_Gather(best_cell, item_count, MPI_UNSIGNED,
-             results,   item_count, MPI_UNSIGNED,
+  // Check the last generation.
+  for (uint32_t i = 0; i < settings.pop_size; i++) {
+      score = test_fitness(&pop[i * genes], genes, knapsack, settings.max_weight);
+      if (score.weight < settings.max_weight && score.value > max) {
+        max = score.value;
+        memcpy(best_cell, &pop[i * genes], genes * sizeof(uint32_t));
+      }
+  }
+
+  MPI_Gather(best_cell, genes, MPI_UNSIGNED,
+             results,   genes, MPI_UNSIGNED,
              0, MPI_COMM_WORLD);
 
   if (id == 0) {
-    for (uint16_t i = 0; i < tasklen; i++) {
-        uint32_t cell_weight = get_weight(&results[i * item_count], item_count, knapsack);
-        if (cell_weight < max_weight) {
-            score = get_value(&results[i * item_count], item_count, knapsack);
+      for (uint32_t i = 0; i < settings.pop_size; i++) {
+          score = test_fitness(&results[i * genes], genes, knapsack, settings.max_weight);
+          if (score.weight < settings.max_weight && score.value > max) {
+            max = score.value;
+            memcpy(best_cell, &results[i * genes], genes * sizeof(uint32_t));
+          }
+      }
 
-            if (score > max) {
-                max = score;
-                memcpy(best_cell, &results[i * item_count], item_count * sizeof(uint32_t));
-            }
-        }
-    }
 
     if (max == 0) {
         printf("No solutions found\n");
     } else {
-        print_cell_nodes(best_cell, item_count, knapsack);
+        print_cell_nodes(best_cell, genes, knapsack);
     }
   }
 
@@ -297,16 +302,21 @@ int main(int argc, char **argv)
   MPI_Comm_rank(MPI_COMM_WORLD, &taskid);
   MPI_Comm_size(MPI_COMM_WORLD, &tasklen);
 
-  uint32_t pop_size = 16;
-  uint32_t item_count = 16; // Must be a power of two.
-  uint32_t max_value = 100;
-  uint32_t max_weight = 100;
-  uint32_t cycles = 1000;
+  parameters_t settings = {
+    16, // pop_size
+    16, // item_count
+    100, // max_value
+    100, // max_weight
+    100, // cycles
+    1, // mutation_prob
+    16 / 10, // migration_size,
+    100 / 10, // migration_freq,
+  };
 
-  knapsack_node_t *nodes = (knapsack_node_t*) calloc(item_count, sizeof(knapsack_node_t));
-  gen_nodes(nodes, item_count, max_value, max_weight);
+  knapsack_node_t *nodes = (knapsack_node_t*) calloc(settings.item_count, sizeof(knapsack_node_t));
+  gen_nodes(nodes, settings.item_count, settings.max_value, settings.max_weight);
 
-  cycle(taskid, tasklen, nodes, pop_size, item_count, max_weight, cycles);
+  cycle(taskid, tasklen, nodes, settings);
 
   free(nodes);
 

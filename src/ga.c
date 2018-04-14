@@ -145,11 +145,11 @@ void copy_arr(uint32_t **arr0, uint32_t **arr1, uint32_t m, uint32_t n)
 
 void cycle(knapsack_node_t *knapsack, parameters_t settings)
 {
-  uint32_t* pop0 = (uint32_t *) calloc(settings.pop_size * settings.item_count,
-                                       sizeof(uint32_t));
-  uint32_t* pop1 = (uint32_t *) calloc(settings.pop_size * settings.item_count,
-                                       sizeof(uint32_t));
-  uint32_t* best_cell = (uint32_t *) calloc(settings.item_count, sizeof(uint32_t));
+
+  uint32_t genes = settings.item_count;
+  uint32_t* pop0 = (uint32_t *) calloc(settings.pop_size * genes, sizeof(uint32_t));
+  uint32_t* pop1 = (uint32_t *) calloc(settings.pop_size * genes, sizeof(uint32_t));
+  uint32_t* best_cell = (uint32_t *) calloc(genes, sizeof(uint32_t));
 
   uint32_t* pop = pop0;
   uint32_t* new_pop = pop1;
@@ -161,7 +161,6 @@ void cycle(knapsack_node_t *knapsack, parameters_t settings)
   knapsack_node_t score = {0, 0};
   uint32_t parent1_score, parent2_score;
   int64_t parent1_idx, parent2_idx;
-  uint32_t genes = settings.item_count;
 
   for (uint32_t c = 0; c < settings.cycles; c++) {
     rank_sum = 0;
@@ -269,11 +268,13 @@ int main(int argc, char **argv)
     100, // max_weight
     100, // cycles
     1, // mutation_prob
+    0, // migration_size,
+    0, // migration_freq,
   };
 
   knapsack_node_t *nodes = (knapsack_node_t*) calloc(settings.item_count, sizeof(knapsack_node_t));
   gen_nodes(nodes, settings.item_count, settings.max_value, settings.max_weight);
-  //print_nodes(nodes, item_count);
+  //print_nodes(nodes, settings.item_count);
 
   cycle(nodes, settings);
 

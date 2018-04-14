@@ -32,5 +32,7 @@ typedef struct parameters_s {
   uint32_t max_weight;
   uint32_t cycles;
   uint32_t mutation_prob;
+  uint32_t migration_size;
+  uint32_t migration_freq;
 } parameters_t;
 

@@ -61,32 +61,62 @@ print_cell_nodes(uint32_t *cell, uint32_t len, knapsack_node_t *knapsack)
     printf("value: %u\t weight: %u\n", value, weight);
 }
 
-__device__ uint64_t
-test_fitness(uint32_t *cell, uint32_t len, knapsack_node_t *knapsack, uint64_t max_weight)
+knapsack_node_t
+test_fitness(uint32_t *cell, uint32_t len,
+             knapsack_node_t *knapsack, uint64_t max_weight)
 {
-  uint32_t value_total = 0;
-  uint32_t weight_total = 0;
+  knapsack_node_t score = {0, 0};
 
   for (uint32_t i = 0; i < len; i++) {
     if (cell[i] == 1) {
-      weight_total += knapsack[i].weight;
-      value_total += knapsack[i].value;
+      score.weight += knapsack[i].weight;
+      score.value += knapsack[i].value;
 
       // Note that breaking once we hit the max weight only counts the values up
       // to that point, and so might induce bias.
-      if (weight_total > max_weight) {
-        value_total = value_total / 2;
+      if (score.weight > max_weight) {
+        score.value = score.value / 2;
         break;
       }
     }
   }
 
-  if (weight_total == 0) {
-      return 0;
+  if (score.weight == 0) {
+      return score;
   }
 
   // Prioritize the value, but give a bump for a better value-to-weight ratio.
-  return value_total + (uint64_t) (value_total / weight_total);
+  //return value_total + (uint64_t) (value_total / weight_total);
+  return score;
+}
+
+__device__ knapsack_node_t
+test_fitness_kernel(uint32_t *cell, uint32_t len,
+                    knapsack_node_t *knapsack, uint64_t max_weight)
+{
+  knapsack_node_t score = {0, 0};
+
+  for (uint32_t i = 0; i < len; i++) {
+    if (cell[i] == 1) {
+      score.weight += knapsack[i].weight;
+      score.value += knapsack[i].value;
+
+      // Note that breaking once we hit the max weight only counts the values up
+      // to that point, and so might induce bias.
+      if (score.weight > max_weight) {
+        score.value = score.value / 2;
+        break;
+      }
+    }
+  }
+
+  if (score.weight == 0) {
+      return score;
+  }
+
+  // Prioritize the value, but give a bump for a better value-to-weight ratio.
+  //return value_total + (uint64_t) (value_total / weight_total);
+  return score;
 }
 
 __device__ uint32_t
@@ -159,19 +189,17 @@ mutate(uint32_t *cell, uint32_t len, curandState_t *state)
 }
 
 __global__ void
-cycle(knapsack_node_t *knapsack, uint32_t pop_size,
-           uint32_t item_count, uint32_t max_weight, uint32_t cycles,
-           uint32_t migration_size, uint32_t migration_freq,
-           uint32_t *dMigration,
-           uint32_t *dResults, uint32_t islands)
+cycle(knapsack_node_t *knapsack, parameters_t settings,
+           uint32_t *dMigration, uint32_t *dResults, uint32_t islands)
 {
   int id = threadIdx.x;
-  uint32_t* pop0 = (uint32_t *) malloc(pop_size * item_count * sizeof(uint32_t));
-  memset(pop0, 0, pop_size * item_count * sizeof(uint32_t));
-  uint32_t* pop1 = (uint32_t *) malloc(pop_size * item_count * sizeof(uint32_t));
-  memset(pop1, 0, pop_size * item_count * sizeof(uint32_t));
-  uint32_t* best_cell = (uint32_t *) malloc(item_count * sizeof(uint32_t));
-  uint32_t* migr_indices = (uint32_t *) malloc(migration_size * sizeof(uint32_t));
+  uint32_t genes = settings.item_count;
+  uint32_t* pop0 = (uint32_t *) malloc(settings.pop_size * genes * sizeof(uint32_t));
+  memset(pop0, 0, settings.pop_size * genes * sizeof(uint32_t));
+  uint32_t* pop1 = (uint32_t *) malloc(settings.pop_size * genes * sizeof(uint32_t));
+  memset(pop1, 0, settings.pop_size * genes * sizeof(uint32_t));
+  uint32_t* best_cell = (uint32_t *) malloc(genes * sizeof(uint32_t));
+  uint32_t* migr_indices = (uint32_t *) malloc(settings.migration_size * sizeof(uint32_t));
 
   uint32_t* pop = pop0;
   uint32_t* new_pop = pop1;
@@ -179,15 +207,16 @@ cycle(knapsack_node_t *knapsack, uint32_t pop_size,
   uint32_t cycle = 0;
   curandState_t state;
   curand_init(100 + id, 0, 0, &state);
-  gen_population_nums(pop, pop_size, item_count, &state);
-  //gen_population_bits(pop, pop_size, item_count, item_count / 4);
-  uint32_t *ranking = (uint32_t *) malloc(pop_size * sizeof(uint32_t));
-  uint32_t rank_sum = 0, max = 0, score = 0;
+  gen_population_nums(pop, settings.pop_size, genes, &state);
+  //gen_population_bits(pop, pop_size, genes, genes / 4);
+  uint32_t *ranking = (uint32_t *) malloc(settings.pop_size * sizeof(uint32_t));
+  uint32_t rank_sum = 0, max = 0;
+  knapsack_node_t score = {0, 0};
   uint32_t parent1_score, parent2_score;
   int64_t parent1_idx, parent2_idx;
 
-  for (uint32_t c = 0; c < cycles; c++) {
-    for (uint32_t x = 0; x < pop_size; x +=2) {
+  for (uint32_t c = 0; c < settings.cycles; c++) {
+    for (uint32_t x = 0; x < settings.pop_size; x +=2) {
       // Note: parents are chosen WITH replacement
       parent1_score = 0;
       parent2_score = 0;
@@ -195,11 +224,18 @@ cycle(knapsack_node_t *knapsack, uint32_t pop_size,
       parent2_idx = -1;
       rank_sum = 0;
 
-      for (uint32_t i = 0; i < pop_size; i++) {
-        score = test_fitness(&pop[i * item_count], item_count, knapsack, max_weight);
+      for (uint32_t i = 0; i < settings.pop_size; i++) {
+        score = test_fitness_kernel(&pop[i * genes], genes, knapsack, settings.max_weight);
 
-        ranking[i] = score;
-        rank_sum += score;
+        // Not all generations may be meet the constraints or have the highest
+        // value, so store the best-scoring cell seen so far.
+        if (score.weight < settings.max_weight && score.value > max) {
+            max = score.value;
+            memcpy(best_cell, &pop[i * genes], genes * sizeof(uint32_t));
+        }
+
+        ranking[i] = score.value;
+        rank_sum += score.value;
       }
 
       if (rank_sum == 0) {
@@ -214,7 +250,7 @@ cycle(knapsack_node_t *knapsack, uint32_t pop_size,
       }
       rank_sum = 0;
 
-      for (int64_t i = 0; i < pop_size; i++) {
+      for (int64_t i = 0; i < settings.pop_size; i++) {
         rank_sum += ranking[i];
         if (parent1_score < rank_sum && parent1_idx == -1) {
           parent1_idx = i;
@@ -229,43 +265,33 @@ cycle(knapsack_node_t *knapsack, uint32_t pop_size,
         }
       }
 
-      breed(&new_pop[x * item_count], &new_pop[(x + 1) * item_count],
-            &pop[parent1_idx * item_count], &pop[parent2_idx * item_count],
-            pop_size / 2); // (2 * 8 * sizeof(uint32_t))
+      breed(&new_pop[x * genes], &new_pop[(x + 1) * genes],
+            &pop[parent1_idx * genes], &pop[parent2_idx * genes],
+            genes / 2); // (2 * 8 * sizeof(uint32_t))
 
-        mutate(&new_pop[x * item_count], item_count, &state);
-        mutate(&new_pop[(x + 1) * item_count], item_count, &state);
-
-    }
-
-    // The population will not necessarily converge to the optimal solution,
-    // so record the best seen cell out of all previously seen cells at each
-    // generation.
-    for (uint16_t i = 0; i < pop_size; i++) {
-        uint32_t cell_weight = get_weight_kernel(&new_pop[i * item_count], item_count, knapsack);
-        if (cell_weight < max_weight) {
-            score = get_value_kernel(&new_pop[i * item_count], item_count, knapsack);
-
-            if (score > max) {
-                max = score;
-                memcpy(best_cell, &new_pop[i * item_count], item_count * sizeof(uint32_t));
-            }
+        if (curand(&state) % settings.mutation_prob == 0) {
+          mutate(&new_pop[x * genes], genes, &state);
         }
+        
+        if (curand(&state) % settings.mutation_prob == 0) {
+          mutate(&new_pop[(x + 1) * genes], genes, &state);
+        }
+
     }
 
-    if (cycle % migration_freq == 0) {
-      for (uint32_t i = 0; i < migration_size; i++) {
-        migr_indices[i] = curand(&state) % pop_size;
-        memcpy(&dMigration[i * ((id + 1) % islands) * item_count + i],
-               &new_pop[i * item_count + migr_indices[i]],
-               item_count * sizeof(uint32_t));
+    if (cycle % settings.migration_freq == 0) {
+      for (uint32_t i = 0; i < settings.migration_size; i++) {
+        migr_indices[i] = curand(&state) % settings.pop_size;
+        memcpy(&dMigration[i * ((id + 1) % islands) * genes + i],
+               &new_pop[i * genes + migr_indices[i]],
+               genes * sizeof(uint32_t));
       }
       __syncthreads();
       
-      for (uint32_t i = 0; i < migration_size; i++) {
-        memcpy(&new_pop[i * item_count + migr_indices[i]],
-               &dMigration[i * id * item_count + i],
-               item_count * sizeof(uint32_t));
+      for (uint32_t i = 0; i < settings.migration_size; i++) {
+        memcpy(&new_pop[i * genes + migr_indices[i]],
+               &dMigration[i * id * genes + i],
+               genes * sizeof(uint32_t));
       }
     }
 
@@ -282,7 +308,16 @@ cycle(knapsack_node_t *knapsack, uint32_t pop_size,
     cycle++;
   }
 
-  memcpy(&dResults[id * item_count], best_cell, item_count * sizeof(uint32_t));
+  // Check the last generation.
+  for (uint32_t i = 0; i < settings.pop_size; i++) {
+      score = test_fitness_kernel(&pop[i * genes], genes, knapsack, settings.max_weight);
+      if (score.weight < settings.max_weight && score.value > max) {
+        max = score.value;
+        memcpy(best_cell, &pop[i * genes], genes * sizeof(uint32_t));
+      }
+  }
+
+  memcpy(&dResults[id * genes], best_cell, genes * sizeof(uint32_t));
 
   free(pop0);
   free(pop1);
@@ -294,57 +329,56 @@ cycle(knapsack_node_t *knapsack, uint32_t pop_size,
 int main(int argc, char **argv)
 {
   //cudaStream_t stream;
-  uint32_t pop_size = 16;
-  uint32_t item_count = 16; // Must be a power of two.
-  uint32_t max_value = 100;
-  uint32_t max_weight = 100;
-  uint32_t cycles = 1000;
-  uint32_t migration_size = pop_size / 10;
-  uint32_t migration_freq = cycles / 10;
+  parameters_t settings = {
+    16, // pop_size
+    16, // item_count
+    100, // max_value
+    100, // max_weight
+    100, // cycles
+    1, // mutation_prob
+    16 / 10, // migration_size,
+    100 / 10, // migration_freq,
+  };
+  uint32_t genes = settings.item_count;
   knapsack_node_t *dNodes;
   uint32_t islands = 10;
-  uint32_t max = 0, score = 0;
-  uint32_t* best_cell = (uint32_t *) malloc(item_count * sizeof(uint32_t));
-  uint32_t *results = (uint32_t *) calloc(islands * item_count, sizeof(uint32_t));
+  uint32_t max = 0;
+  knapsack_node_t score = {0, 0};
+  uint32_t* best_cell = (uint32_t *) malloc(genes * sizeof(uint32_t));
+  uint32_t *results = (uint32_t *) calloc(islands * genes, sizeof(uint32_t));
   uint32_t *dResults;
   uint32_t *dMigration;
 
-  knapsack_node_t *nodes = (knapsack_node_t*) calloc(item_count, sizeof(knapsack_node_t));
-  gen_nodes(nodes, item_count, max_value, max_weight);
+  knapsack_node_t *nodes = (knapsack_node_t*) calloc(genes, sizeof(knapsack_node_t));
+  gen_nodes(nodes, genes, settings.max_value, settings.max_weight);
 
-  CHECK(cudaMalloc((void **)&dNodes, sizeof(knapsack_node_t) * item_count));
-  CHECK(cudaMemcpy(dNodes, nodes, item_count * sizeof(knapsack_node_t), cudaMemcpyHostToDevice));
+  CHECK(cudaMalloc((void **)&dNodes, sizeof(knapsack_node_t) * genes));
+  CHECK(cudaMemcpy(dNodes, nodes, genes * sizeof(knapsack_node_t), cudaMemcpyHostToDevice));
 
-  CHECK(cudaMalloc((void **)&dResults, islands * item_count * sizeof(uint32_t)));
-  CHECK(cudaMalloc((void **)&dMigration, islands * item_count * migration_size * sizeof(uint32_t)));
+  CHECK(cudaMalloc((void **)&dResults, islands * genes * sizeof(uint32_t)));
+  CHECK(cudaMalloc((void **)&dMigration, islands * genes * settings.migration_size * sizeof(uint32_t)));
 
   //CHECK(cudaStreamCreate(&stream));
 
-  cycle<<<1, islands>>>(dNodes, pop_size, item_count, max_weight, cycles,
-                                   migration_size, migration_freq, dMigration,
-                                   dResults, islands);
+  cycle<<<1, islands>>>(dNodes, settings, dMigration, dResults, islands);
 
   //CHECK(cudaStreamSynchronize(stream));
   cudaDeviceSynchronize();
 
-  CHECK(cudaMemcpy(results, dResults, item_count * islands * sizeof(uint32_t), cudaMemcpyDeviceToHost));
+  CHECK(cudaMemcpy(results, dResults, genes * islands * sizeof(uint32_t), cudaMemcpyDeviceToHost));
 
   for (uint16_t i = 0; i < islands; i++) {
-      uint32_t cell_weight = get_weight(&results[i * item_count], item_count, nodes);
-      if (cell_weight < max_weight) {
-          score = get_value(&results[i * item_count], item_count, nodes);
-
-          if (score > max) {
-              max = score;
-              memcpy(best_cell, &results[i * item_count], item_count * sizeof(uint32_t));
-          }
+      score = test_fitness(&results[i * genes], genes, nodes, settings.max_weight);
+      if (score.weight < settings.max_weight && score.value > max) {
+          max = score.value;
+          memcpy(best_cell, &results[i * genes], genes * sizeof(uint32_t));
       }
   }
 
   if (max == 0) {
     printf("Nothing found.\n");
   } else {
-    print_cell_nodes(best_cell, item_count, nodes);
+    print_cell_nodes(best_cell, genes, nodes);
   }
 
   free(best_cell);
