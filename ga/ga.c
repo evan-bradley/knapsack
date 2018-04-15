@@ -1,4 +1,4 @@
-#include "kp.h"
+#include "../common/kp.h"
 #include <memory.h>
 
 #define get_bit(arr, i) (arr[i / 32] & (1 << (i % 32)))
@@ -165,7 +165,7 @@ void cycle(knapsack_node_t *knapsack, parameters_t settings,
   uint32_t* new_pop = pop1;
   uint8_t cycle = 0;
   //gen_population_nums(pop, pop_size, item_count);
-  gen_population_bits(pop, settings.pop_size, settings.item_count, settings.item_count / 128, 0);
+  gen_population_bits(pop, settings.pop_size, settings.item_count, settings.item_count / 10, 0);
   uint32_t *ranking = calloc(settings.pop_size, sizeof(uint32_t));
   uint32_t rank_sum = 0, max = 0;
   knapsack_node_t score = {0, 0};
@@ -290,7 +290,7 @@ int main(int argc, char **argv)
   knapsack_node_t *nodes;
   uint32_t *best_cell, *best_cell_ga;
   knapsack_node_t best = {0, 0};
-  uint32_t dist, diff;
+  uint32_t diff;
 
   if (argc > 2) {
     if (*argv[1] == 'i') {
@@ -309,14 +309,14 @@ int main(int argc, char **argv)
   cycle(nodes, settings, &best, best_cell_ga);
 
   if (argc > 2) {
-    dist = cell_dist(best_cell, best_cell_ga, genes);
+    //dist = cell_dist(best_cell, best_cell_ga, genes);
     diff = cell_diff(best_cell, best_cell_ga, genes);
 
     if (best.value == 0) {
       printf("No results\n");
     } else {
       printf("Percent optimal: %.4f\n", (float) best.value / (float) header.best_value);
-      printf("Distance: %u\n", dist);
+      //printf("Distance: %u\n", dist);
       printf("Difference: %u\n", diff);
     }
   } else {

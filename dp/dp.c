@@ -1,4 +1,4 @@
-#include "kp.h"
+#include "../common/kp.h"
 #include <time.h>
 
  #define max(a,b) \
@@ -17,12 +17,14 @@ knapsack_node_t Knapsack(knapsack_node_t *nodes, uint32_t **V,
                          uint32_t **keep, file_header_t opt)
 {
     knapsack_node_t best = {0, 0};
+    uint32_t n = opt.item_count;
+    uint32_t W = opt.max_weight;
 
-    for (uint32_t i = 0; i <= opt.item_count; i++)
+    for (uint32_t i = 0; i <= n; i++)
     {
         // NOTE: if i == 0, node is garbage; just set to satisfy the compiler.
         knapsack_node_t node = i != 0 ? nodes[i - 1] : nodes[i];
-        for (uint32_t j = 0; j <= opt.max_weight; j++)
+        for (uint32_t j = 0; j <= W; j++)
         {
             if (i == 0 || j == 0)
             {
@@ -46,8 +48,8 @@ knapsack_node_t Knapsack(knapsack_node_t *nodes, uint32_t **V,
             }
         }
     }
-    uint32_t K = opt.max_weight;
-    for (int i = opt.item_count; i > 0; i--)
+    uint32_t K = W;
+    for (int i = n; i > 0; i--)
     {
         knapsack_node_t node = nodes[i - 1];
         if (keep[i][K] == 1)
@@ -57,7 +59,7 @@ knapsack_node_t Knapsack(knapsack_node_t *nodes, uint32_t **V,
         }
     }
 
-    best.value = V[opt.item_count][opt.max_weight];
+    best.value = V[n][W];
     return best;
 }
 
@@ -81,7 +83,7 @@ int main()
     file_header_t options = {
       1024,  // item_count
       100, // max_value
-      1000, // max_weight
+      2048, // max_weight
       0, // best_value
       0, // best_weight
     };

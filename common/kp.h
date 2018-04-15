@@ -44,7 +44,7 @@ void print_nodes(knapsack_node_t *knapsack, uint32_t nodes)
   }
 }
 
-void write_data(file_header_t *header, knapsack_node_t *nodes, uint32_t *best, char *filename)
+void write_data(file_header_t *header, knapsack_node_t *nodes, uint32_t *best, const char *filename)
 {
     FILE *data = fopen(filename, "wb");
 
@@ -55,7 +55,7 @@ void write_data(file_header_t *header, knapsack_node_t *nodes, uint32_t *best, c
     fclose(data);
 }
 
-void read_data(file_header_t *header, knapsack_node_t **nodes, uint32_t **best, char *filename)
+void read_data(file_header_t *header, knapsack_node_t **nodes, uint32_t **best, const char *filename)
 {
     FILE *data = fopen(filename, "rb");
 

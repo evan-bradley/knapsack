@@ -1,4 +1,4 @@
-#include "kp.h"
+#include "../common/kp.h"
 #include <memory.h>
 #include <mpi.h>
 

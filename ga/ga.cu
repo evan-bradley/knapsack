@@ -1,5 +1,5 @@
-#include "kp.h"
-#include "common.h"
+#include "../common/kp.h"
+#include "../common/common.h"
 #include <memory.h>
 #include <cuda.h>
 #include <curand_kernel.h>
