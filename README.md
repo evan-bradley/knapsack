@@ -12,10 +12,10 @@ the 0/1 knapsack problem.
 | CUDA GA | nvcc -lcurand ga.cu -o ./gacu |
 
 #Running
-| Algorithm wame | command    |
-| ---           | ---        |
-| Serial DP |./dp|
-| CUDA DP |./dpcu|
-| Serial GA |./ga| 
-| MPI GA |mpirun -np 4 ./mpi|
-| CUDA GA |./gacu| 
+| Algorithm name | command    |
+| ---            | ---        |
+| Serial DP      | ./dp |
+| CUDA DP        | ./dpcu |
+| Serial GA      | ./ga | 
+| MPI GA         | mpirun -np 4 ./mpi |
+| CUDA GA        | ./gacu | 
