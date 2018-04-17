@@ -11,11 +11,11 @@ the 0/1 knapsack problem.
 | MPI GA | mpicc -g mpi.c -o mpi |
 | CUDA GA | nvcc -lcurand ga.cu -o ./gacu |
 
-#Running
-| Algorithm name | command    |
-| ---            | ---        |
-| Serial DP      | ./dp |
-| CUDA DP        | ./dpcu |
-| Serial GA      | ./ga | 
+# Running
+| Algorithm name | command            |
+| ---            | ---                |
+| Serial DP      | ./dp               |
+| CUDA DP        | ./dpcu             |
+| Serial GA      | ./ga               | 
 | MPI GA         | mpirun -np 4 ./mpi |
-| CUDA GA        | ./gacu | 
+| CUDA GA        | ./gacu             | 
